@@ -541,7 +541,8 @@ function activateTine(tine, note, px, py) {
 }
 
 function spawnPrismBurst(cx, cy) {
-  for(let i=0;i<10;i++){
+  if(document.querySelectorAll('.pburst').length > 20) return;
+  for(let i=0;i<5;i++){
     const p=document.createElement('div'); p.className='pburst';
     const sz=4+Math.random()*10;
     const hue=((i/10)*360+Math.random()*30)|0;
@@ -556,7 +557,7 @@ function spawnPrismBurst(cx, cy) {
       `left:${cx-sz/2}px;top:${cy-sz/2}px;`+
       `--pb-x:${pbx};--pb-y:${pby};--pb-dur:${dur};`;
     document.body.appendChild(p);
-    setTimeout(()=>p.remove(),1000);
+    setTimeout(()=>p.remove(),600);
   }
 }
 

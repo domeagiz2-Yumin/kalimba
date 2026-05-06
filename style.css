@@ -1329,7 +1329,6 @@ body.theme-SAKURA .lang-mini            { background: rgba(0,0,0,0.04); border-c
   top: -15%; height: 145%;
   transform: rotate(-22deg);
   transform-origin: 50% 0%;
-  will-change: filter, opacity;
   animation: rayPulse var(--rd) var(--rdelay) ease-in-out infinite,
              prismHue  var(--rhue) linear var(--rhd) infinite;
 }
@@ -1397,7 +1396,6 @@ body.theme-PRISM {
 }
 body.theme-PRISM .tine-body {
   animation: prismShift 6s linear infinite;
-  will-change: filter;
 }
 body.theme-PRISM.pressed .tine-body { animation: none; }
 @keyframes prismShift {
