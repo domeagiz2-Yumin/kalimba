@@ -652,12 +652,11 @@ body.theme-TOY #drum-board .board-base { background: var(--base-bg); border-top-
 .overlay.hidden { display: none; }
 
 .panel {
-  position: fixed; bottom: 0; left: 0; right: 0;
+  position: fixed; top: 0; bottom: 0; left: 0; right: 0;
   background: var(--panel-bg);
   border-radius: 0;
   border-top: none;
   z-index: 101;
-  height: 100vh;
   display: flex; flex-direction: column;
   transform: translateY(0);
   transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
