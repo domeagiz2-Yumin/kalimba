@@ -481,7 +481,7 @@ function renderTines(containerId = 'tines-container', interactive = true) {
   });
 
   if (interactive) {
-    let lastSlideNote = null;
+    const lastSlideNote = new Map();
     container.addEventListener('pointermove', e => {
       if (e.pointerType === 'mouse' && e.buttons === 0) return;
       e.preventDefault();
@@ -489,12 +489,12 @@ function renderTines(containerId = 'tines-container', interactive = true) {
       const tineEl = el?.closest?.('.tine[data-note]');
       if (!tineEl) return;
       const note = tineEl.dataset.note;
-      if (note === lastSlideNote) return;
-      lastSlideNote = note;
+      if (note === lastSlideNote.get(e.pointerId)) return;
+      lastSlideNote.set(e.pointerId, note);
       activateTine(tineEl, note, e.clientX, e.clientY);
     }, { passive: false });
-    container.addEventListener('pointerup',     () => { lastSlideNote = null; });
-    container.addEventListener('pointercancel', () => { lastSlideNote = null; });
+    container.addEventListener('pointerup',     e => { lastSlideNote.delete(e.pointerId); });
+    container.addEventListener('pointercancel', e => { lastSlideNote.delete(e.pointerId); });
   }
 
   // คำนวณความสูงลิ้นจาก container จริง
