@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Kalimba</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ SPLASH ═══ -->
+<div id="screen-splash" class="screen active">
+  <div class="splash-inner">
+    <div class="splash-logo">
+      <img src="assets/images/logo.png" class="logo-img" alt="DomeGeekArt">
+      <div class="logo-sub">presents</div>
+    </div>
+    <div class="splash-bar-wrap">
+      <div class="splash-bar"><div id="splashFill" class="splash-fill"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LANGUAGE ═══ -->
+
+<!-- ═══ ANIMATED BG LAYERS ═══ -->
+<div id="green-canvas" class="anim-layer"></div>
+<canvas id="neon-canvas" class="anim-layer"></canvas>
+<div id="lava-canvas"  class="anim-layer"></div>
+<canvas id="star-canvas" class="anim-layer"></canvas>
+<div id="prism-canvas" class="anim-layer"></div>
+
+<!-- ═══ MAIN APP ═══ -->
+<div id="screen-main" class="screen">
+  <div id="drum-board" class="hidden">
+    <div id="drop-canvas" class="board-drop-layer"></div>
+    <div id="drum-body"></div>
+    <div class="board-base">
+      <div class="fab-row">
+        <button id="btn-record-drum" class="fab fab-record" onclick="App.toggleRecord()">
+          <div class="rec-dot"></div>
+          <span class="rec-timer hidden">0:00</span>
+        </button>
+        <div class="fab-spacer"></div>
+        <button id="txt-quickTheme-drum" class="fab-theme-quick" onclick="App.nextTheme()">🎨 ธีม</button>
+        <div class="fab-spacer"></div>
+        <button class="fab fab-settings" onclick="App.openSettings()">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <path d="M12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm7.43-1.57c.04-.3.07-.61.07-.93s-.03-.63-.07-.93l2-1.56a.48.48 0 0 0 .12-.63l-1.89-3.27a.49.49 0 0 0-.61-.22l-2.36.95a6.9 6.9 0 0 0-1.6-.93l-.36-2.5A.49.49 0 0 0 14 4h-4a.49.49 0 0 0-.5.42l-.36 2.5c-.58.25-1.12.57-1.6.93l-2.36-.95a.49.49 0 0 0-.61.22L2.68 10.4a.48.48 0 0 0 .12.63l2 1.56c-.04.3-.07.62-.07.93s.03.63.07.93l-2 1.56a.48.48 0 0 0-.12.63l1.89 3.27c.12.22.38.3.61.22l2.36-.95c.48.36 1.02.68 1.6.93l.36 2.5c.07.24.29.42.5.42h4c.21 0 .43-.18.5-.42l.36-2.5c.58-.25 1.12-.57 1.6-.93l2.36.95c.23.09.49 0 .61-.22l1.89-3.27a.48.48 0 0 0-.12-.63l-2-1.56z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="kalimba-board">
+    <div id="drop-canvas-klmb" class="board-drop-layer"></div>
+    <div id="sakura-canvas"></div>
+    <div id="tines-area">
+      <div id="bridge-bar"></div>
+      <div id="tines-container"></div>
+    </div>
+    <div id="board-base">
+      <div class="fab-row">
+        <button id="btn-record" class="fab fab-record" onclick="App.toggleRecord()">
+          <div class="rec-dot"></div>
+          <span id="rec-timer" class="rec-timer hidden">0:00</span>
+        </button>
+        <div class="fab-spacer"></div>
+        <button id="txt-quickTheme" class="fab-theme-quick" onclick="App.nextTheme()">🎨 ธีม</button>
+        <div class="fab-spacer"></div>
+        <button class="fab fab-settings" onclick="App.openSettings()">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <path d="M12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm7.43-1.57c.04-.3.07-.61.07-.93s-.03-.63-.07-.93l2-1.56a.48.48 0 0 0 .12-.63l-1.89-3.27a.49.49 0 0 0-.61-.22l-2.36.95a6.9 6.9 0 0 0-1.6-.93l-.36-2.5A.49.49 0 0 0 14 4h-4a.49.49 0 0 0-.5.42l-.36 2.5c-.58.25-1.12.57-1.6.93l-2.36-.95a.49.49 0 0 0-.61.22L2.68 10.4a.48.48 0 0 0 .12.63l2 1.56c-.04.3-.07.62-.07.93s.03.63.07.93l-2 1.56a.48.48 0 0 0-.12.63l1.89 3.27c.12.22.38.3.61.22l2.36-.95c.48.36 1.02.68 1.6.93l.36 2.5c.07.24.29.42.5.42h4c.21 0 .43-.18.5-.42l.36-2.5c.58-.25 1.12-.57 1.6-.93l2.36.95c.23.09.49 0 .61-.22l1.89-3.27a.48.48 0 0 0-.12-.63l-2-1.56z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS PANEL ═══ -->
+<div id="settings-overlay" class="overlay hidden" onclick="App.closeSettings()"></div>
+<div id="settings-panel" class="panel hidden">
+  <div class="panel-handle"></div>
+  <div class="panel-header">
+    <span id="txt-settings" class="panel-title">ตั้งค่า</span>
+    <button class="panel-close" onclick="App.closeSettings()">✕</button>
+  </div>
+  <div class="panel-scroll">
+
+    <!-- Volume -->
+    <div class="s-section">
+      <div class="s-label" id="txt-volume">ระดับเสียง</div>
+      <div class="vol-row">
+        <span class="vol-icon">🔈</span>
+        <input type="range" id="volSlider" class="vol-slider" min="0" max="100" value="80" oninput="App.setVolume(this.value)">
+        <span class="vol-icon">🔊</span>
+      </div>
+    </div>
+
+    <!-- EQ -->
+    <div class="s-section">
+      <div class="s-label" id="txt-eq">เอฟเฟคเสียง</div>
+      <div class="preset-row" id="eqRow"></div>
+    </div>
+
+    <!-- Mode -->
+    <div class="s-section" id="section-mode">
+      <div class="s-label" id="txt-mode">โหมดลิ้น</div>
+      <div class="mode-row">
+        <button class="mode-btn" data-mode="9" onclick="App.setMode(9)">
+          <span class="mode-num">9</span>
+          <span class="mode-sub" id="txt-tines">ลิ้น</span>
+        </button>
+        <button class="mode-btn" data-mode="13" onclick="App.setMode(13)">
+          <span class="mode-num">13</span>
+          <span class="mode-sub">ลิ้น</span>
+        </button>
+        <button class="mode-btn active" data-mode="17" onclick="App.setMode(17)">
+          <span class="mode-num">17</span>
+          <span class="mode-sub">ลิ้น</span>
+        </button>
+      </div>
+      <div id="txt-orient17" class="mode-note"></div>
+    </div>
+
+    <!-- Theme -->
+    <div class="s-section">
+      <div class="s-label" id="txt-theme">ธีม</div>
+      <div id="themeList" class="theme-list"></div>
+    </div>
+
+    <!-- Instrument -->
+    <div class="s-section">
+      <div class="s-label" id="txt-instrument">เครื่องดนตรี</div>
+      <div id="instrumentList" class="inst-list"></div>
+    </div>
+
+    <!-- Recordings -->
+    <div class="s-section">
+      <div class="s-label" id="txt-recordings">การบันทึก</div>
+      <div id="recordingsList" class="recordings-list"></div>
+    </div>
+
+    <!-- Language -->
+    <div class="s-section">
+      <div class="s-label" id="txt-language">ภาษา</div>
+      <div class="lang-mini-row">
+        <button class="lang-mini" data-lang="th" onclick="App.setLang('th')">🇹🇭 ไทย</button>
+        <button class="lang-mini" data-lang="en" onclick="App.setLang('en')">🇬🇧 EN</button>
+      </div>
+    </div>
+
+    <!-- Reset -->
+    <div class="s-section">
+      <button class="reset-btn" onclick="App.confirmReset()" id="txt-reset">รีเซตทั้งหมด</button>
+    </div>
+
+    <!-- About -->
+    <div class="s-section about-section">
+      <div class="about-name">DomeGeekArt</div>
+      <div class="about-ver">v1.0.0</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ PLAYBACK PANEL ═══ -->
+<div id="play-overlay" class="overlay hidden" onclick="App.closePlayback()"></div>
+<div id="play-panel" class="panel hidden">
+  <div class="panel-handle"></div>
+  <div class="panel-header">
+    <span id="txt-playback" class="panel-title">เล่นย้อนหลัง</span>
+    <button class="panel-close" onclick="App.closePlayback()">✕</button>
+  </div>
+  <div class="playback-body">
+    <div id="pb-tines-wrap">
+      <div id="pb-tines"></div>
+    </div>
+    <div class="pb-controls">
+      <button id="pb-play" class="pb-btn pb-play-btn" onclick="App.startReplay()">▶</button>
+      <button id="pb-stop" class="pb-btn" onclick="App.stopReplay()" disabled>⏹</button>
+      <button id="pb-export" class="pb-btn pb-export-btn" onclick="App.exportAudio()">
+        <span id="txt-save">💾 บันทึกเสียง</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RESET DIALOG ═══ -->
+<div id="reset-overlay" class="overlay hidden"></div>
+<div id="reset-dialog" class="dialog hidden">
+  <div class="dialog-icon">⚠️</div>
+  <h3 id="txt-resetTitle">รีเซตทั้งหมด?</h3>
+  <p id="txt-resetMsg">การบันทึกและการตั้งค่าทั้งหมดจะหาย ยกเว้นแพ็กเกจที่ซื้อแล้ว</p>
+  <div class="dialog-row">
+    <button class="dlg-cancel" onclick="App.cancelReset()" id="txt-cancel">ยกเลิก</button>
+    <button class="dlg-confirm" onclick="App.doReset()" id="txt-confirmReset">รีเซต</button>
+  </div>
+</div>
+
+<!-- ═══ PORTRAIT WARNING ═══ -->
+
+<!-- ═══ TOAST ═══ -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
