@@ -1437,4 +1437,14 @@ body.theme-RAINBOW .theme-item.active {
   font-weight: 700;
 }
 
+body.theme-SAKURA .preset-btn.active,
+body.theme-SAKURA .mode-btn.active,
+body.theme-SAKURA .lang-mini.active,
+body.theme-SAKURA .theme-item.active {
+  box-shadow: inset 0 0 0 2px #c05080 !important;
+  background: rgba(220,100,150,0.18) !important;
+  color: #c05080 !important;
+  font-weight: 700;
+}
+
 
