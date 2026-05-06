@@ -140,7 +140,8 @@ function normalizeBuffer(buffer) {
     }
   }
   console.log(`normalizeBuffer: peak=${peak.toFixed(4)}, scale=${peak === 0 ? 1 : (0.85/peak).toFixed(2)}x`);
-  if (peak === 0 || peak >= 0.85) return buffer;
+  if (peak === 0) return buffer;
+  if (Math.abs(peak - 0.85) < 0.02) return buffer;
   const scale = 0.85 / peak;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const data = buffer.getChannelData(ch);
@@ -154,11 +155,11 @@ async function preloadAudio(onProgress) {
   masterGain = audioCtx.createGain();
   masterGain.gain.value = state.volume / 100;
   limiterNode = audioCtx.createDynamicsCompressor();
-  limiterNode.threshold.value = -10;
+  limiterNode.threshold.value = -14;
   limiterNode.knee.value = 3;
-  limiterNode.ratio.value = 10;
+  limiterNode.ratio.value = 12;
   limiterNode.attack.value = 0.001;
-  limiterNode.release.value = 0.02;
+  limiterNode.release.value = 0.08;
   limiterNode.connect(audioCtx.destination);
 
   const allToLoad = [
