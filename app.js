@@ -360,7 +360,8 @@ async function exportAudio() {
     const wavBuf = encodeWAV(interleaved, sr, 2);
     const blob = new Blob([wavBuf], { type: 'audio/wav' });
     const filename = `kalimba_${rec.id}.wav`;
-    if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'audio/wav' })] })) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS && navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'audio/wav' })] })) {
       await navigator.share({ files: [new File([blob], filename, { type: 'audio/wav' })], title: filename });
     } else {
       const url = URL.createObjectURL(blob);
