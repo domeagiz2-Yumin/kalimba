@@ -423,6 +423,8 @@ function renderTines(containerId = 'tines-container', interactive = true) {
   document.documentElement.style.setProperty('--tine-width', tineW + 'px');
   document.documentElement.style.setProperty('--tine-gap', gap + 'px');
 
+  const lastSlideNote = new Map();
+
   layout.forEach((noteFile, i) => {
     const dist = Math.abs(i - center);
     const hr = 1 - (dist / maxDist) * 0.30;
@@ -473,6 +475,7 @@ function renderTines(containerId = 'tines-container', interactive = true) {
       tine.dataset.note = noteFile;
       tine.addEventListener('pointerdown', e => {
         e.preventDefault();
+        lastSlideNote.set(e.pointerId, noteFile);
         activateTine(tine, noteFile, e.clientX, e.clientY);
       });
       tine.addEventListener('pointerenter', e => {
@@ -482,7 +485,6 @@ function renderTines(containerId = 'tines-container', interactive = true) {
   });
 
   if (interactive) {
-    const lastSlideNote = new Map();
     container.addEventListener('pointermove', e => {
       if (e.pointerType === 'mouse' && e.buttons === 0) return;
       e.preventDefault();
