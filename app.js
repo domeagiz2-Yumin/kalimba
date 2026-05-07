@@ -109,8 +109,8 @@ let state = { ...DEFAULT_STATE };
 // ═══════════════════════════════════════
 //  AUDIO
 // ═══════════════════════════════════════
-let audioCtx, masterGain, limiterNode, audioBuffers = {};
-let _eqNodes = [];
+let audioCtx, drumGain, kalimbaGain, drumLimiter, kalimbaLimiter, audioBuffers = {};
+let _drumEQNodes = [], _kalimbaEQNodes = [];
 const activeDrumSrc = {};
 const activeKalimbaSrc = {};
 let currentReplaySources = [];
@@ -149,31 +149,20 @@ function normalizeBuffer(buffer, target = 0.85) {
   return buffer;
 }
 
-function compressDrumBuffer(buffer) {
-  const threshold = 0.25;
-  const ratio = 4;
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const data = buffer.getChannelData(ch);
-    for (let i = 0; i < data.length; i++) {
-      const abs = Math.abs(data[i]);
-      if (abs > threshold)
-        data[i] = Math.sign(data[i]) * (threshold + (abs - threshold) / ratio);
-    }
-  }
-  return buffer;
-}
 
 async function preloadAudio(onProgress) {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = state.volume / 100;
-  limiterNode = audioCtx.createDynamicsCompressor();
-  limiterNode.threshold.value = 0;
-  limiterNode.knee.value = 1;
-  limiterNode.ratio.value = 20;
-  limiterNode.attack.value = 0.001;
-  limiterNode.release.value = 0.15;
-  limiterNode.connect(audioCtx.destination);
+  const mkChain = () => {
+    const gain = audioCtx.createGain();
+    gain.gain.value = state.volume / 100;
+    const lim = audioCtx.createDynamicsCompressor();
+    lim.threshold.value = 0; lim.knee.value = 1; lim.ratio.value = 20;
+    lim.attack.value = 0.001; lim.release.value = 0.15;
+    lim.connect(audioCtx.destination);
+    return { gain, lim };
+  };
+  ({ gain: kalimbaGain, lim: kalimbaLimiter } = mkChain());
+  ({ gain: drumGain,    lim: drumLimiter    } = mkChain());
 
   const allToLoad = [
     ...ALL_NOTES.map(n => ({ key: n, path: `${AUDIO_PATH}${n}.wav` })),
@@ -186,8 +175,7 @@ async function preloadAudio(onProgress) {
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
       const decoded = await audioCtx.decodeAudioData(buf);
-      if (isDrumKey) compressDrumBuffer(decoded);
-      normalizeBuffer(decoded, isDrumKey ? 0.55 : 1.0);
+      normalizeBuffer(decoded, isDrumKey ? 0.75 : 1.0);
       audioBuffers[key] = trimSilence(decoded, isDrumKey ? 1.8 : 1.5);
     } catch(e) { /* skip failed */ }
     done++;
@@ -204,13 +192,8 @@ function currentEQ() {
 }
 
 function buildSharedEQ() {
-  if (!audioCtx || !masterGain || !limiterNode) return;
-  masterGain.disconnect();
-  _eqNodes.forEach(n => { try { n.disconnect(); } catch(_) {} });
-  _eqNodes = [];
+  if (!audioCtx || !kalimbaGain || !drumGain) return;
 
-  const drum = state.instrument === 'DRUM';
-  const eq = currentEQ();
   const mkf = (type, freq, Q, gain) => {
     const f = audioCtx.createBiquadFilter();
     f.type = type; f.frequency.value = freq;
@@ -218,21 +201,26 @@ function buildSharedEQ() {
     if (gain !== undefined) f.gain.value = gain;
     return f;
   };
-  let prev = masterGain;
-  const chain = (nodes) => {
-    nodes.forEach(n => { prev.connect(n); _eqNodes.push(n); prev = n; });
+
+  const buildChain = (srcGain, eqNodes, eq, isD, limiter) => {
+    srcGain.disconnect();
+    eqNodes.forEach(n => { try { n.disconnect(); } catch(_) {} });
+    eqNodes.length = 0;
+    let prev = srcGain;
+    const chain = (nodes) => nodes.forEach(n => { prev.connect(n); eqNodes.push(n); prev = n; });
+    if      (eq === 'WARM')     chain([mkf('lowpass',  isD?1200:1000, 0.6),     mkf('lowshelf',  isD?200:480,   undefined, 3)]);
+    else if (eq === 'BRIGHT')   chain([mkf('highpass', isD?200:120,   0.5),     mkf('highshelf', isD?1400:2400, undefined, 6)]);
+    else if (eq === 'DEEP')     chain([mkf('lowshelf', isD?220:500,   undefined, 5), mkf('highshelf', isD?900:2800, undefined, -5)]);
+    else if (eq === 'PRESENCE') chain([mkf('peaking',  isD?450:1000,  1.0, 5),  mkf('peaking',   isD?1800:4500, 2.0, 4)]);
+    if (!isD || eq !== 'DRY') {
+      const ceil = mkf('lowpass', isD ? 8000 : 6000, isD ? 0.1 : 0.7);
+      prev.connect(ceil); eqNodes.push(ceil); prev = ceil;
+    }
+    prev.connect(limiter);
   };
 
-  if      (eq === 'WARM')     chain([mkf('lowpass',  drum?1200:1000, 0.6),    mkf('lowshelf',  drum?200:480,  undefined, 3)]);
-  else if (eq === 'BRIGHT')   chain([mkf('highpass', drum?200:120,   0.5),    mkf('highshelf', drum?1400:2400,undefined, 6)]);
-  else if (eq === 'DEEP')     chain([mkf('lowshelf', drum?220:500,   undefined,5),mkf('highshelf',drum?900:2800,undefined,-5)]);
-  else if (eq === 'PRESENCE') chain([mkf('peaking',  drum?450:1000,  1.0, 5), mkf('peaking',   drum?1800:4500,2.0,       4)]);
-
-  if (!drum || eq !== 'DRY') {
-    const ceil = mkf('lowpass', drum ? 8000 : 6000, drum ? 0.1 : 0.7);
-    prev.connect(ceil); _eqNodes.push(ceil); prev = ceil;
-  }
-  prev.connect(limiterNode);
+  buildChain(kalimbaGain, _kalimbaEQNodes, state.eqKalimba, false, kalimbaLimiter);
+  buildChain(drumGain,    _drumEQNodes,    state.eqDrum,    true,  drumLimiter);
 }
 
 function playNote(noteFile, scheduleAt = 0) {
@@ -244,7 +232,7 @@ function playNote(noteFile, scheduleAt = 0) {
 
   const env = audioCtx.createGain();
   src.connect(env);
-  env.connect(masterGain);
+  env.connect(isDrum ? drumGain : kalimbaGain);
 
   const isDrum = noteFile.startsWith('drum_');
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
@@ -1950,7 +1938,8 @@ const App = {
 
   setVolume(val) {
     state.volume = Number(val);
-    if (masterGain) masterGain.gain.value = state.volume / 100;
+    if (kalimbaGain) kalimbaGain.gain.value = state.volume / 100;
+    if (drumGain)    drumGain.gain.value    = state.volume / 100;
     saveState();
   },
 
