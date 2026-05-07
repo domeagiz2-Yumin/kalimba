@@ -141,8 +141,8 @@ function normalizeBuffer(buffer) {
   }
   console.log(`normalizeBuffer: peak=${peak.toFixed(4)}, scale=${peak === 0 ? 1 : (0.85/peak).toFixed(2)}x`);
   if (peak === 0) return buffer;
-  if (Math.abs(peak - 0.85) < 0.02) return buffer;
-  const scale = 0.85 / peak;
+  if (Math.abs(peak - 0.5) < 0.02) return buffer;
+  const scale = 0.5 / peak;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const data = buffer.getChannelData(ch);
     for (let i = 0; i < data.length; i++) data[i] *= scale;
@@ -155,11 +155,11 @@ async function preloadAudio(onProgress) {
   masterGain = audioCtx.createGain();
   masterGain.gain.value = state.volume / 100;
   limiterNode = audioCtx.createDynamicsCompressor();
-  limiterNode.threshold.value = -6;
-  limiterNode.knee.value = 6;
-  limiterNode.ratio.value = 4;
-  limiterNode.attack.value = 0.005;
-  limiterNode.release.value = 0.25;
+  limiterNode.threshold.value = -3;
+  limiterNode.knee.value = 4;
+  limiterNode.ratio.value = 10;
+  limiterNode.attack.value = 0.002;
+  limiterNode.release.value = 0.2;
   limiterNode.connect(audioCtx.destination);
 
   const allToLoad = [
@@ -207,7 +207,7 @@ function buildSharedEQ() {
     nodes.forEach(n => { prev.connect(n); _eqNodes.push(n); prev = n; });
   };
 
-  if      (eq === 'WARM')     chain([mkf('lowpass',  drum?550:1000,  0.6),    mkf('lowshelf',  drum?200:480,  undefined, 3)]);
+  if      (eq === 'WARM')     chain([mkf('lowpass',  drum?1200:1000, 0.6),    mkf('lowshelf',  drum?200:480,  undefined, 3)]);
   else if (eq === 'BRIGHT')   chain([mkf('highpass', drum?200:120,   0.5),    mkf('highshelf', drum?1400:2400,undefined, 6)]);
   else if (eq === 'DEEP')     chain([mkf('lowshelf', drum?220:500,   undefined,5),mkf('highshelf',drum?900:2800,undefined,-5)]);
   else if (eq === 'PRESENCE') chain([mkf('peaking',  drum?450:1000,  1.0, 5), mkf('peaking',   drum?1800:4500,2.0,       4)]);
@@ -769,7 +769,7 @@ function startReplay() {
 function stopReplay() {
   replayTimeouts.forEach(clearTimeout);
   replayTimeouts = [];
-  currentReplaySources.forEach(obj => { try { obj.src.stop(); } catch(e){} });
+  currentReplaySources.forEach(obj => fadeStop(obj));
   currentReplaySources = [];
 
   document.getElementById('pb-play').disabled = false;
@@ -1172,7 +1172,11 @@ function renderDrum() {
   ce.style.cursor = 'pointer';
   ce.addEventListener('pointerdown', e => {
     e.preventDefault(); ce.setAttribute('fill', ceP);
-    resumeCtx(); playNote('drum_c3');
+    resumeCtx();
+    if (activeDrumSrc['c3']) fadeStop(activeDrumSrc['c3']);
+    const c3Obj = playNote('drum_c3');
+    activeDrumSrc['c3'] = c3Obj;
+    if (c3Obj) c3Obj.src.addEventListener('ended', () => { delete activeDrumSrc['c3']; });
     if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
     if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
     if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
