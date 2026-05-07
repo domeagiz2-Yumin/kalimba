@@ -172,7 +172,7 @@ async function preloadAudio(onProgress) {
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
       const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), isDrumKey ? 0.75 : 1.0);
-      audioBuffers[key] = isDrumKey ? trimSilence(decoded, 3.0) : trimSilence(decoded, 1.5);
+      audioBuffers[key] = isDrumKey ? trimSilence(decoded, 2.0) : trimSilence(decoded, 1.5);
     } catch(e) { /* skip failed */ }
     done++;
     onProgress(Math.round(done / allToLoad.length * 100));
@@ -232,8 +232,8 @@ function playNote(noteFile, scheduleAt = 0) {
 
   const isDrum = noteFile.startsWith('drum_');
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
-  const hold = isDrum ? 2.5 : 1.0;
-  const fade = isDrum ? 3.0 : 1.5;
+  const hold = isDrum ? 1.5 : 1.0;
+  const fade = isDrum ? 2.0 : 1.5;
   const attack = isDrum ? 0.0005 : 0.01;
   env.gain.setValueAtTime(0, t);
   env.gain.linearRampToValueAtTime(1, t + attack);
