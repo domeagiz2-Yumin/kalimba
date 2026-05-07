@@ -171,7 +171,7 @@ async function preloadAudio(onProgress) {
       const res = await fetch(path);
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
-      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), isDrumKey ? 1.0 : 0.85);
+      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), 1.0);
       audioBuffers[key] = isDrumKey ? trimSilence(decoded, 3.0) : trimSilence(decoded, 1.5);
     } catch(e) { /* skip failed */ }
     done++;
@@ -217,7 +217,7 @@ function buildSharedEQ() {
     boost.gain.value = 2.0;
     prev.connect(boost); _eqNodes.push(boost); prev = boost;
   }
-  const ceil = mkf('lowpass', drum ? 8000 : 3000, drum ? 0.1 : 0.7);
+  const ceil = mkf('lowpass', drum ? 8000 : 6000, drum ? 0.1 : 0.7);
   prev.connect(ceil); _eqNodes.push(ceil); prev = ceil;
   prev.connect(limiterNode);
 }
