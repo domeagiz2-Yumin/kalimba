@@ -212,7 +212,12 @@ function buildSharedEQ() {
   else if (eq === 'DEEP')     chain([mkf('lowshelf', drum?220:500,   undefined,5),mkf('highshelf',drum?900:2800,undefined,-5)]);
   else if (eq === 'PRESENCE') chain([mkf('peaking',  drum?450:1000,  1.0, 5), mkf('peaking',   drum?1800:4500,2.0,       4)]);
 
-  const ceil = mkf('lowpass', drum ? 8000 : 3000, 0.7);
+  if (drum) {
+    const boost = audioCtx.createGain();
+    boost.gain.value = 2.0;
+    prev.connect(boost); _eqNodes.push(boost); prev = boost;
+  }
+  const ceil = mkf('lowpass', drum ? 8000 : 3000, drum ? 0.1 : 0.7);
   prev.connect(ceil); _eqNodes.push(ceil); prev = ceil;
   prev.connect(limiterNode);
 }
