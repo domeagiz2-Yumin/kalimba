@@ -275,7 +275,7 @@ function fadeStop(srcObj, fadeTime = 0.01) {
       env.gain.cancelAndHoldAtTime(t);
       env.gain.linearRampToValueAtTime(0, t + fadeTime);
     }
-    setTimeout(() => { try { src.stop(); } catch(_) {} }, fadeTime * 1000 + 5);
+    try { src.stop(t + fadeTime + 0.001); } catch(_) {}
   } catch(_) { try { src.stop(); } catch(__) {} }
 }
 
