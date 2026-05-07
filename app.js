@@ -171,7 +171,7 @@ async function preloadAudio(onProgress) {
       const res = await fetch(path);
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
-      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), 1.0);
+      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), isDrumKey ? 0.75 : 1.0);
       audioBuffers[key] = isDrumKey ? trimSilence(decoded, 3.0) : trimSilence(decoded, 1.5);
     } catch(e) { /* skip failed */ }
     done++;
@@ -250,7 +250,7 @@ function playNote(noteFile, scheduleAt = 0) {
   return { src, env };
 }
 
-function fadeStop(srcObj) {
+function fadeStop(srcObj, fadeTime = 0.01) {
   if (!srcObj) return;
   const { src, env } = srcObj;
   try {
@@ -258,9 +258,9 @@ function fadeStop(srcObj) {
       const t = audioCtx.currentTime;
       env.gain.cancelScheduledValues(t);
       env.gain.setValueAtTime(env.gain.value, t);
-      env.gain.linearRampToValueAtTime(0, t + 0.01);
+      env.gain.linearRampToValueAtTime(0, t + fadeTime);
     }
-    setTimeout(() => { try { src.stop(); } catch(_) {} }, 15);
+    setTimeout(() => { try { src.stop(); } catch(_) {} }, fadeTime * 1000 + 5);
   } catch(_) { try { src.stop(); } catch(__) {} }
 }
 
@@ -1139,8 +1139,10 @@ function renderDrum() {
     path.addEventListener('pointerdown', e => {
       e.preventDefault(); path.setAttribute('fill', tP);
       resumeCtx();
-      if (activeDrumSrc[key]) fadeStop(activeDrumSrc[key]);
-      const dObj = playNote('drum_' + key);
+      const hadActive = !!activeDrumSrc[key];
+      if (hadActive) fadeStop(activeDrumSrc[key], 0.003);
+      const startAt = hadActive ? audioCtx.currentTime + 0.003 : 0;
+      const dObj = playNote('drum_' + key, startAt);
       activeDrumSrc[key] = dObj;
       if (dObj) dObj.src.addEventListener('ended', () => { delete activeDrumSrc[key]; });
       if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
@@ -1176,8 +1178,10 @@ function renderDrum() {
   ce.addEventListener('pointerdown', e => {
     e.preventDefault(); ce.setAttribute('fill', ceP);
     resumeCtx();
-    if (activeDrumSrc['c3']) fadeStop(activeDrumSrc['c3']);
-    const c3Obj = playNote('drum_c3');
+    const hadC3 = !!activeDrumSrc['c3'];
+    if (hadC3) fadeStop(activeDrumSrc['c3'], 0.003);
+    const c3Start = hadC3 ? audioCtx.currentTime + 0.003 : 0;
+    const c3Obj = playNote('drum_c3', c3Start);
     activeDrumSrc['c3'] = c3Obj;
     if (c3Obj) c3Obj.src.addEventListener('ended', () => { delete activeDrumSrc['c3']; });
     if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
