@@ -212,11 +212,6 @@ function buildSharedEQ() {
   else if (eq === 'DEEP')     chain([mkf('lowshelf', drum?220:500,   undefined,5),mkf('highshelf',drum?900:2800,undefined,-5)]);
   else if (eq === 'PRESENCE') chain([mkf('peaking',  drum?450:1000,  1.0, 5), mkf('peaking',   drum?1800:4500,2.0,       4)]);
 
-  if (drum) {
-    const boost = audioCtx.createGain();
-    boost.gain.value = 2.0;
-    prev.connect(boost); _eqNodes.push(boost); prev = boost;
-  }
   const ceil = mkf('lowpass', drum ? 8000 : 6000, drum ? 0.1 : 0.7);
   prev.connect(ceil); _eqNodes.push(ceil); prev = ceil;
   prev.connect(limiterNode);
@@ -237,8 +232,9 @@ function playNote(noteFile, scheduleAt = 0) {
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
   const hold = isDrum ? 2.5 : 1.0;
   const fade = isDrum ? 3.0 : 1.5;
+  const attack = isDrum ? 0.002 : 0.01;
   env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(1, t + 0.01);
+  env.gain.linearRampToValueAtTime(1, t + attack);
   env.gain.setValueAtTime(1, t + hold);
   env.gain.linearRampToValueAtTime(0, t + fade);
 
