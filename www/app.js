@@ -130,7 +130,7 @@ function trimSilence(buffer, maxSec = 1.5) {
   return out;
 }
 
-function normalizeBuffer(buffer) {
+function normalizeBuffer(buffer, target = 0.85) {
   let peak = 0;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const data = buffer.getChannelData(ch);
@@ -139,10 +139,9 @@ function normalizeBuffer(buffer) {
       if (abs > peak) peak = abs;
     }
   }
-  console.log(`normalizeBuffer: peak=${peak.toFixed(4)}, scale=${peak === 0 ? 1 : (0.85/peak).toFixed(2)}x`);
   if (peak === 0) return buffer;
-  if (Math.abs(peak - 0.85) < 0.02) return buffer;
-  const scale = 0.85 / peak;
+  if (Math.abs(peak - target) < 0.02) return buffer;
+  const scale = target / peak;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const data = buffer.getChannelData(ch);
     for (let i = 0; i < data.length; i++) data[i] *= scale;
@@ -171,8 +170,9 @@ async function preloadAudio(onProgress) {
     try {
       const res = await fetch(path);
       const buf = await res.arrayBuffer();
-      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf));
-      audioBuffers[key] = key.startsWith('drum_') ? trimSilence(decoded, 3.0) : trimSilence(decoded, 1.5);
+      const isDrumKey = key.startsWith('drum_');
+      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), isDrumKey ? 1.0 : 0.85);
+      audioBuffers[key] = isDrumKey ? trimSilence(decoded, 3.0) : trimSilence(decoded, 1.5);
     } catch(e) { /* skip failed */ }
     done++;
     onProgress(Math.round(done / allToLoad.length * 100));
