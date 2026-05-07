@@ -257,7 +257,7 @@ function fadeStop(srcObj, fadeTime = 0.01) {
     if (env && audioCtx) {
       const t = audioCtx.currentTime;
       env.gain.cancelScheduledValues(t);
-      env.gain.setValueAtTime(env.gain.value, t);
+      env.gain.setValueAtTime(1, t);
       env.gain.linearRampToValueAtTime(0, t + fadeTime);
     }
     setTimeout(() => { try { src.stop(); } catch(_) {} }, fadeTime * 1000 + 5);
@@ -1144,7 +1144,7 @@ function renderDrum() {
       const startAt = hadActive ? audioCtx.currentTime + 0.003 : 0;
       const dObj = playNote('drum_' + key, startAt);
       activeDrumSrc[key] = dObj;
-      if (dObj) dObj.src.addEventListener('ended', () => { delete activeDrumSrc[key]; });
+      if (dObj) dObj.src.addEventListener('ended', () => { if (activeDrumSrc[key] === dObj) delete activeDrumSrc[key]; });
       if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
       if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
       if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
@@ -1183,7 +1183,7 @@ function renderDrum() {
     const c3Start = hadC3 ? audioCtx.currentTime + 0.003 : 0;
     const c3Obj = playNote('drum_c3', c3Start);
     activeDrumSrc['c3'] = c3Obj;
-    if (c3Obj) c3Obj.src.addEventListener('ended', () => { delete activeDrumSrc['c3']; });
+    if (c3Obj) c3Obj.src.addEventListener('ended', () => { if (activeDrumSrc['c3'] === c3Obj) delete activeDrumSrc['c3']; });
     if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
     if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
     if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
