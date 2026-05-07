@@ -149,6 +149,20 @@ function normalizeBuffer(buffer, target = 0.85) {
   return buffer;
 }
 
+function compressDrumBuffer(buffer) {
+  const threshold = 0.25;
+  const ratio = 4;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      const abs = Math.abs(data[i]);
+      if (abs > threshold)
+        data[i] = Math.sign(data[i]) * (threshold + (abs - threshold) / ratio);
+    }
+  }
+  return buffer;
+}
+
 async function preloadAudio(onProgress) {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
@@ -171,8 +185,10 @@ async function preloadAudio(onProgress) {
       const res = await fetch(path);
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
-      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), isDrumKey ? 0.75 : 1.0);
-      audioBuffers[key] = isDrumKey ? trimSilence(decoded, 2.0) : trimSilence(decoded, 1.5);
+      const decoded = await audioCtx.decodeAudioData(buf);
+      if (isDrumKey) compressDrumBuffer(decoded);
+      normalizeBuffer(decoded, isDrumKey ? 0.55 : 1.0);
+      audioBuffers[key] = trimSilence(decoded, isDrumKey ? 1.8 : 1.5);
     } catch(e) { /* skip failed */ }
     done++;
     onProgress(Math.round(done / allToLoad.length * 100));
@@ -256,8 +272,7 @@ function fadeStop(srcObj, fadeTime = 0.01) {
   try {
     if (env && audioCtx) {
       const t = audioCtx.currentTime;
-      env.gain.cancelScheduledValues(t);
-      env.gain.setValueAtTime(1, t);
+      env.gain.cancelAndHoldAtTime(t);
       env.gain.linearRampToValueAtTime(0, t + fadeTime);
     }
     setTimeout(() => { try { src.stop(); } catch(_) {} }, fadeTime * 1000 + 5);
@@ -1140,8 +1155,8 @@ function renderDrum() {
       e.preventDefault(); path.setAttribute('fill', tP);
       resumeCtx();
       const hadActive = !!activeDrumSrc[key];
-      if (hadActive) fadeStop(activeDrumSrc[key], 0.003);
-      const startAt = hadActive ? audioCtx.currentTime + 0.003 : 0;
+      if (hadActive) fadeStop(activeDrumSrc[key], 0.015);
+      const startAt = hadActive ? audioCtx.currentTime + 0.015 : 0;
       const dObj = playNote('drum_' + key, startAt);
       activeDrumSrc[key] = dObj;
       if (dObj) dObj.src.addEventListener('ended', () => { if (activeDrumSrc[key] === dObj) delete activeDrumSrc[key]; });
@@ -1179,8 +1194,8 @@ function renderDrum() {
     e.preventDefault(); ce.setAttribute('fill', ceP);
     resumeCtx();
     const hadC3 = !!activeDrumSrc['c3'];
-    if (hadC3) fadeStop(activeDrumSrc['c3'], 0.003);
-    const c3Start = hadC3 ? audioCtx.currentTime + 0.003 : 0;
+    if (hadC3) fadeStop(activeDrumSrc['c3'], 0.015);
+    const c3Start = hadC3 ? audioCtx.currentTime + 0.015 : 0;
     const c3Obj = playNote('drum_c3', c3Start);
     activeDrumSrc['c3'] = c3Obj;
     if (c3Obj) c3Obj.src.addEventListener('ended', () => { if (activeDrumSrc['c3'] === c3Obj) delete activeDrumSrc['c3']; });
