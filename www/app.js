@@ -109,7 +109,8 @@ let state = { ...DEFAULT_STATE };
 // ═══════════════════════════════════════
 //  AUDIO
 // ═══════════════════════════════════════
-let audioCtx, masterGain, audioBuffers = {};
+let audioCtx, masterGain, limiterNode, audioBuffers = {};
+let _eqNodes = [];
 const activeDrumSrc = {};
 const activeKalimbaSrc = {};
 let currentReplaySources = [];
@@ -139,7 +140,8 @@ function normalizeBuffer(buffer) {
     }
   }
   console.log(`normalizeBuffer: peak=${peak.toFixed(4)}, scale=${peak === 0 ? 1 : (0.85/peak).toFixed(2)}x`);
-  if (peak === 0 || peak >= 0.85) return buffer;
+  if (peak === 0) return buffer;
+  if (Math.abs(peak - 0.85) < 0.02) return buffer;
   const scale = 0.85 / peak;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const data = buffer.getChannelData(ch);
@@ -152,14 +154,13 @@ async function preloadAudio(onProgress) {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
   masterGain.gain.value = state.volume / 100;
-  const limiter = audioCtx.createDynamicsCompressor();
-  limiter.threshold.value = -10;
-  limiter.knee.value = 3;
-  limiter.ratio.value = 10;
-  limiter.attack.value = 0.001;
-  limiter.release.value = 0.02;
-  masterGain.connect(limiter);
-  limiter.connect(audioCtx.destination);
+  limiterNode = audioCtx.createDynamicsCompressor();
+  limiterNode.threshold.value = -6;
+  limiterNode.knee.value = 6;
+  limiterNode.ratio.value = 4;
+  limiterNode.attack.value = 0.005;
+  limiterNode.release.value = 0.25;
+  limiterNode.connect(audioCtx.destination);
 
   const allToLoad = [
     ...ALL_NOTES.map(n => ({ key: n, path: `${AUDIO_PATH}${n}.wav` })),
@@ -186,69 +187,34 @@ function currentEQ() {
   return state.instrument === 'DRUM' ? state.eqDrum : state.eqKalimba;
 }
 
-function createChain() {
-  const input = audioCtx.createGain();
-  let output = input;
+function buildSharedEQ() {
+  if (!audioCtx || !masterGain || !limiterNode) return;
+  masterGain.disconnect();
+  _eqNodes.forEach(n => { try { n.disconnect(); } catch(_) {} });
+  _eqNodes = [];
+
   const drum = state.instrument === 'DRUM';
   const eq = currentEQ();
+  const mkf = (type, freq, Q, gain) => {
+    const f = audioCtx.createBiquadFilter();
+    f.type = type; f.frequency.value = freq;
+    if (Q    !== undefined) f.Q.value    = Q;
+    if (gain !== undefined) f.gain.value = gain;
+    return f;
+  };
+  let prev = masterGain;
+  const chain = (nodes) => {
+    nodes.forEach(n => { prev.connect(n); _eqNodes.push(n); prev = n; });
+  };
 
-  if (eq === 'WARM') {
-    // อุ่น นุ่ม หมอง — ตัดแหลม + boost ต่ำ
-    const lp = audioCtx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = drum ? 550 : 1000;
-    lp.Q.value = 0.6;
-    const lo = audioCtx.createBiquadFilter();
-    lo.type = 'lowshelf';
-    lo.frequency.value = drum ? 200 : 480;
-    lo.gain.value = 3;
-    input.connect(lp); lp.connect(lo); output = lo;
+  if      (eq === 'WARM')     chain([mkf('lowpass',  drum?550:1000,  0.6),    mkf('lowshelf',  drum?200:480,  undefined, 3)]);
+  else if (eq === 'BRIGHT')   chain([mkf('highpass', drum?200:120,   0.5),    mkf('highshelf', drum?1400:2400,undefined, 6)]);
+  else if (eq === 'DEEP')     chain([mkf('lowshelf', drum?220:500,   undefined,5),mkf('highshelf',drum?900:2800,undefined,-5)]);
+  else if (eq === 'PRESENCE') chain([mkf('peaking',  drum?450:1000,  1.0, 5), mkf('peaking',   drum?1800:4500,2.0,       4)]);
 
-  } else if (eq === 'BRIGHT') {
-    // ใส กระจ่าง โลหะ — ตัด rumble + boost แหลม
-    const hp = audioCtx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = drum ? 200 : 120;
-    hp.Q.value = 0.5;
-    const hs = audioCtx.createBiquadFilter();
-    hs.type = 'highshelf';
-    hs.frequency.value = drum ? 1400 : 2400;
-    hs.gain.value = 6;
-    input.connect(hp); hp.connect(hs); output = hs;
-
-  } else if (eq === 'DEEP') {
-    // หนัก อวบ ทุ้ม — bass อวบ + ตัดแหลม
-    const lo = audioCtx.createBiquadFilter();
-    lo.type = 'lowshelf';
-    lo.frequency.value = drum ? 220 : 500;
-    lo.gain.value = 5;
-    const hi = audioCtx.createBiquadFilter();
-    hi.type = 'highshelf';
-    hi.frequency.value = drum ? 900 : 2800;
-    hi.gain.value = -5;
-    input.connect(lo); lo.connect(hi); output = hi;
-
-  } else if (eq === 'PRESENCE') {
-    // โดดเด่น พุ่ง ชัดเจน — mid push + air
-    const mid = audioCtx.createBiquadFilter();
-    mid.type = 'peaking';
-    mid.frequency.value = drum ? 450 : 1000;
-    mid.Q.value = 1.0; mid.gain.value = 5;
-    const air = audioCtx.createBiquadFilter();
-    air.type = 'peaking';
-    air.frequency.value = drum ? 1800 : 4500;
-    air.Q.value = 2.0; air.gain.value = 4;
-    input.connect(mid); mid.connect(air); output = air;
-  }
-
-  // noise ceiling — ตัด high freq noise ออกเสมอ ไม่ว่า preset ไหน
-  const ceil = audioCtx.createBiquadFilter();
-  ceil.type = 'lowpass';
-  ceil.frequency.value = drum ? 2500 : 3000;
-  ceil.Q.value = 0.7;
-  output.connect(ceil); output = ceil;
-
-  return { input, output };
+  const ceil = mkf('lowpass', drum ? 8000 : 3000, 0.7);
+  prev.connect(ceil); _eqNodes.push(ceil); prev = ceil;
+  prev.connect(limiterNode);
 }
 
 function playNote(noteFile, scheduleAt = 0) {
@@ -259,25 +225,40 @@ function playNote(noteFile, scheduleAt = 0) {
   src.buffer = audioBuffers[noteFile];
 
   const env = audioCtx.createGain();
-  const chain = createChain();
-  src.connect(chain.input);
-  chain.output.connect(env);
+  src.connect(env);
   env.connect(masterGain);
 
+  const isDrum = noteFile.startsWith('drum_');
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
+  const hold = isDrum ? 2.5 : 1.0;
+  const fade = isDrum ? 3.0 : 1.5;
   env.gain.setValueAtTime(0, t);
   env.gain.linearRampToValueAtTime(1, t + 0.01);
-  env.gain.setValueAtTime(1, t + 1.0);
-  env.gain.linearRampToValueAtTime(0, t + 1.5);
+  env.gain.setValueAtTime(1, t + hold);
+  env.gain.linearRampToValueAtTime(0, t + fade);
 
-  src.addEventListener('ended', () => { env.disconnect(); chain.output.disconnect(); });
+  src.addEventListener('ended', () => { env.disconnect(); });
 
   if (state.isRecording && scheduleAt === 0) {
     state.recordedNotes.push({ file: noteFile, time: audioCtx.currentTime - state.recordStart });
   }
 
   src.start(t);
-  return src;
+  return { src, env };
+}
+
+function fadeStop(srcObj) {
+  if (!srcObj) return;
+  const { src, env } = srcObj;
+  try {
+    if (env && audioCtx) {
+      const t = audioCtx.currentTime;
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(env.gain.value, t);
+      env.gain.linearRampToValueAtTime(0, t + 0.01);
+    }
+    setTimeout(() => { try { src.stop(); } catch(_) {} }, 15);
+  } catch(_) { try { src.stop(); } catch(__) {} }
 }
 
 // ═══════════════════════════════════════
@@ -355,8 +336,8 @@ async function exportAudio() {
 
   try {
     const duration = rec.duration + 3;
-    const sr = 44100;
-    const offCtx = new OfflineAudioContext(2, sr * duration, sr);
+    const sr = audioCtx ? audioCtx.sampleRate : 44100;
+    const offCtx = new OfflineAudioContext(2, Math.ceil(sr * duration), sr);
 
     rec.notes.forEach(n => {
       if (!audioBuffers[n.file]) return;
@@ -381,13 +362,18 @@ async function exportAudio() {
 
     const wavBuf = encodeWAV(interleaved, sr, 2);
     const blob = new Blob([wavBuf], { type: 'audio/wav' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url;
-    a.download = `kalimba_${rec.id}.wav`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `kalimba_${rec.id}.wav`;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS && navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'audio/wav' })] })) {
+      await navigator.share({ files: [new File([blob], filename, { type: 'audio/wav' })], title: filename });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   } catch(e) {
     console.error(e);
   }
@@ -441,6 +427,8 @@ function renderTines(containerId = 'tines-container', interactive = true) {
   document.documentElement.style.setProperty('--tine-width', tineW + 'px');
   document.documentElement.style.setProperty('--tine-gap', gap + 'px');
 
+  const lastSlideNote = new Map();
+
   layout.forEach((noteFile, i) => {
     const dist = Math.abs(i - center);
     const hr = 1 - (dist / maxDist) * 0.30;
@@ -488,8 +476,10 @@ function renderTines(containerId = 'tines-container', interactive = true) {
     container.appendChild(tine);
 
     if (interactive) {
+      tine.dataset.note = noteFile;
       tine.addEventListener('pointerdown', e => {
         e.preventDefault();
+        lastSlideNote.set(e.pointerId, noteFile);
         activateTine(tine, noteFile, e.clientX, e.clientY);
       });
       tine.addEventListener('pointerenter', e => {
@@ -498,16 +488,32 @@ function renderTines(containerId = 'tines-container', interactive = true) {
     }
   });
 
+  if (interactive) {
+    container.addEventListener('pointermove', e => {
+      if (e.pointerType === 'mouse' && e.buttons === 0) return;
+      e.preventDefault();
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const tineEl = el?.closest?.('.tine[data-note]');
+      if (!tineEl) return;
+      const note = tineEl.dataset.note;
+      if (note === lastSlideNote.get(e.pointerId)) return;
+      lastSlideNote.set(e.pointerId, note);
+      activateTine(tineEl, note, e.clientX, e.clientY);
+    }, { passive: false });
+    container.addEventListener('pointerup',     e => { lastSlideNote.delete(e.pointerId); });
+    container.addEventListener('pointercancel', e => { lastSlideNote.delete(e.pointerId); });
+  }
+
   // คำนวณความสูงลิ้นจาก container จริง
   adjustTineHeights(container);
 }
 
 
 function activateTine(tine, note, px, py) {
-  if (activeKalimbaSrc[note]) { try { activeKalimbaSrc[note].stop(); } catch(_) {} }
-  const kSrc = playNote(note);
-  activeKalimbaSrc[note] = kSrc;
-  if (kSrc) kSrc.addEventListener('ended', () => { delete activeKalimbaSrc[note]; });
+  if (activeKalimbaSrc[note]) fadeStop(activeKalimbaSrc[note]);
+  const kObj = playNote(note);
+  activeKalimbaSrc[note] = kObj;
+  if (kObj) kObj.src.addEventListener('ended', () => { delete activeKalimbaSrc[note]; });
   tine.classList.add('pressed');
   setTimeout(() => tine.classList.remove('pressed'), 280);
 
@@ -541,7 +547,8 @@ function activateTine(tine, note, px, py) {
 }
 
 function spawnPrismBurst(cx, cy) {
-  for(let i=0;i<10;i++){
+  if(document.querySelectorAll('.pburst').length > 20) return;
+  for(let i=0;i<5;i++){
     const p=document.createElement('div'); p.className='pburst';
     const sz=4+Math.random()*10;
     const hue=((i/10)*360+Math.random()*30)|0;
@@ -556,7 +563,7 @@ function spawnPrismBurst(cx, cy) {
       `left:${cx-sz/2}px;top:${cy-sz/2}px;`+
       `--pb-x:${pbx};--pb-y:${pby};--pb-dur:${dur};`;
     document.body.appendChild(p);
-    setTimeout(()=>p.remove(),1000);
+    setTimeout(()=>p.remove(),600);
   }
 }
 
@@ -732,8 +739,8 @@ function startReplay() {
 
   rec.notes.forEach(n => {
     // Audio
-    const src = playNote(n.file, now + n.time);
-    if (src) currentReplaySources.push(src);
+    const srcObj = playNote(n.file, now + n.time);
+    if (srcObj) currentReplaySources.push(srcObj);
 
     // Visual
     const tid = setTimeout(() => {
@@ -762,7 +769,7 @@ function startReplay() {
 function stopReplay() {
   replayTimeouts.forEach(clearTimeout);
   replayTimeouts = [];
-  currentReplaySources.forEach(src => { try { src.stop(); } catch(e){} });
+  currentReplaySources.forEach(obj => { try { obj.src.stop(); } catch(e){} });
   currentReplaySources = [];
 
   document.getElementById('pb-play').disabled = false;
@@ -1129,10 +1136,10 @@ function renderDrum() {
     path.addEventListener('pointerdown', e => {
       e.preventDefault(); path.setAttribute('fill', tP);
       resumeCtx();
-      if (activeDrumSrc[key]) { try { activeDrumSrc[key].stop(); } catch(_) {} }
-      const dSrc = playNote('drum_' + key);
-      activeDrumSrc[key] = dSrc;
-      if (dSrc) dSrc.addEventListener('ended', () => { delete activeDrumSrc[key]; });
+      if (activeDrumSrc[key]) fadeStop(activeDrumSrc[key]);
+      const dObj = playNote('drum_' + key);
+      activeDrumSrc[key] = dObj;
+      if (dObj) dObj.src.addEventListener('ended', () => { delete activeDrumSrc[key]; });
       if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
       if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
       if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
@@ -1868,8 +1875,11 @@ const App = {
     }).observe(document.getElementById('screen-main'));
 
     // Resume audio on first touch
-    document.addEventListener('touchstart', resumeCtx, { once: true });
-    document.addEventListener('click', resumeCtx, { once: true });
+    document.addEventListener('touchstart', resumeCtx);
+    document.addEventListener('click', resumeCtx);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') resumeCtx();
+    });
 
     const fillEl = document.getElementById('splashFill');
     const splashStart = Date.now();
@@ -1888,6 +1898,7 @@ const App = {
     if (elapsed < 4000) await new Promise(r => setTimeout(r, 4000 - elapsed));
 
     loadState();
+    buildSharedEQ();
     this._startMain();
   },
 
@@ -1922,6 +1933,7 @@ const App = {
     else state.eqKalimba = id;
     saveState();
     renderEQ();
+    buildSharedEQ();
   },
 
   setMode(n) {
@@ -1934,6 +1946,7 @@ const App = {
   setInstrument(id) {
     state.instrument = id;
     applyInstrument();
+    buildSharedEQ();
     renderInstruments();
     saveState();
   },

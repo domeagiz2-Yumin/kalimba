@@ -155,11 +155,11 @@ async function preloadAudio(onProgress) {
   masterGain = audioCtx.createGain();
   masterGain.gain.value = state.volume / 100;
   limiterNode = audioCtx.createDynamicsCompressor();
-  limiterNode.threshold.value = -14;
-  limiterNode.knee.value = 3;
-  limiterNode.ratio.value = 12;
-  limiterNode.attack.value = 0.001;
-  limiterNode.release.value = 0.08;
+  limiterNode.threshold.value = -6;
+  limiterNode.knee.value = 6;
+  limiterNode.ratio.value = 4;
+  limiterNode.attack.value = 0.005;
+  limiterNode.release.value = 0.25;
   limiterNode.connect(audioCtx.destination);
 
   const allToLoad = [
@@ -212,7 +212,7 @@ function buildSharedEQ() {
   else if (eq === 'DEEP')     chain([mkf('lowshelf', drum?220:500,   undefined,5),mkf('highshelf',drum?900:2800,undefined,-5)]);
   else if (eq === 'PRESENCE') chain([mkf('peaking',  drum?450:1000,  1.0, 5), mkf('peaking',   drum?1800:4500,2.0,       4)]);
 
-  const ceil = mkf('lowpass', drum ? 2500 : 3000, 0.7);
+  const ceil = mkf('lowpass', drum ? 8000 : 3000, 0.7);
   prev.connect(ceil); _eqNodes.push(ceil); prev = ceil;
   prev.connect(limiterNode);
 }
@@ -228,11 +228,14 @@ function playNote(noteFile, scheduleAt = 0) {
   src.connect(env);
   env.connect(masterGain);
 
+  const isDrum = noteFile.startsWith('drum_');
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
+  const hold = isDrum ? 2.5 : 1.0;
+  const fade = isDrum ? 3.0 : 1.5;
   env.gain.setValueAtTime(0, t);
   env.gain.linearRampToValueAtTime(1, t + 0.01);
-  env.gain.setValueAtTime(1, t + 1.0);
-  env.gain.linearRampToValueAtTime(0, t + 1.5);
+  env.gain.setValueAtTime(1, t + hold);
+  env.gain.linearRampToValueAtTime(0, t + fade);
 
   src.addEventListener('ended', () => { env.disconnect(); });
 
