@@ -363,8 +363,8 @@ body.theme-SAKURA .tine-ripple.r2 {
 ═══════════════════════════════════════ */
 #screen-main {
   background: var(--bg);
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 body.theme-BLUE #screen-main,
 body.theme-GREEN #screen-main,
@@ -377,6 +377,7 @@ body.theme-SAKURA #screen-main { background: transparent; }
   width: 820px;
   height: 420px;
   flex-shrink: 0;
+  transform-origin: top left;
   display: flex; flex-direction: column;
   background: #1a1a2e;
   border-radius: 8px;
@@ -406,7 +407,7 @@ body.theme-TOY #drum-board .board-base { background: var(--base-bg); border-top-
   background: var(--board-bg);
   position: relative;
   overflow: hidden;
-  transform-origin: center center;
+  transform-origin: top left;
   border-radius: 8px;
 }
 

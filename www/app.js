@@ -2095,7 +2095,9 @@ function scaleApp() {
   const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   const scale = Math.min(vw / W, vh / H);
   window._kalimbaScale = scale;
-  const t = `scale(${scale.toFixed(4)})`;
+  const ox = ((vw - W * scale) / 2).toFixed(2);
+  const oy = ((vh - H * scale) / 2).toFixed(2);
+  const t = `translate(${ox}px,${oy}px) scale(${scale.toFixed(4)})`;
   const board = document.getElementById('kalimba-board');
   if (board) board.style.transform = t;
   const drum = document.getElementById('drum-board');
