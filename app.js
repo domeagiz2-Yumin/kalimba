@@ -263,11 +263,20 @@ function fadeStop(srcObj, fadeTime = 0.01) {
   try {
     const t = audioCtx ? audioCtx.currentTime : 0;
     if (env && audioCtx) {
-      env.gain.cancelAndHoldAtTime(t);
+      const g = env.gain.value;
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(g, t);
       env.gain.linearRampToValueAtTime(0, t + fadeTime);
     }
     try { src.stop(t + fadeTime + 0.001); } catch(_) {}
   } catch(_) { try { src.stop(); } catch(__) {} }
+}
+
+function killDrumVoice(srcObj) {
+  if (!srcObj) return;
+  const { src, env } = srcObj;
+  try { if (env) env.gain.value = 0; } catch(_) {}
+  try { if (src) src.stop(); } catch(_) {}
 }
 
 // ═══════════════════════════════════════
@@ -1145,11 +1154,10 @@ function renderDrum() {
     path.addEventListener('pointerdown', e => {
       e.preventDefault(); path.setAttribute('fill', tP);
       resumeCtx();
-      drumVoiceQueue.forEach(v => fadeStop(v, 0.010));
+      drumVoiceQueue.forEach(v => killDrumVoice(v));
       drumVoiceQueue.length = 0;
       Object.keys(activeDrumSrc).forEach(k => delete activeDrumSrc[k]);
-      const startAt = audioCtx.currentTime + 0.012;
-      const dObj = playNote('drum_' + key, startAt);
+      const dObj = playNote('drum_' + key, 0);
       activeDrumSrc[key] = dObj;
       if (dObj) {
         drumVoiceQueue.push(dObj);
@@ -1191,11 +1199,10 @@ function renderDrum() {
   ce.addEventListener('pointerdown', e => {
     e.preventDefault(); ce.setAttribute('fill', ceP);
     resumeCtx();
-    drumVoiceQueue.forEach(v => fadeStop(v, 0.010));
+    drumVoiceQueue.forEach(v => killDrumVoice(v));
     drumVoiceQueue.length = 0;
     Object.keys(activeDrumSrc).forEach(k => delete activeDrumSrc[k]);
-    const c3Start = audioCtx.currentTime + 0.012;
-    const c3Obj = playNote('drum_c3', c3Start);
+    const c3Obj = playNote('drum_c3', 0);
     activeDrumSrc['c3'] = c3Obj;
     if (c3Obj) {
       drumVoiceQueue.push(c3Obj);
