@@ -230,11 +230,11 @@ function playNote(noteFile, scheduleAt = 0) {
   const src = audioCtx.createBufferSource();
   src.buffer = audioBuffers[noteFile];
 
+  const isDrum = noteFile.startsWith('drum_');
+
   const env = audioCtx.createGain();
   src.connect(env);
   env.connect(isDrum ? drumGain : kalimbaGain);
-
-  const isDrum = noteFile.startsWith('drum_');
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
   const hold = isDrum ? 1.5 : 1.0;
   const fade = isDrum ? 2.0 : 1.5;
