@@ -1934,6 +1934,12 @@ const App = {
   },
 
   selectLang(lang) {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
     state.lang = lang;
     saveState();
     this._startMain();
