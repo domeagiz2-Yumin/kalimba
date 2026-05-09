@@ -113,7 +113,7 @@ let audioCtx, drumGain, kalimbaGain, drumLimiter, kalimbaLimiter, audioBuffers =
 let _drumEQNodes = [], _kalimbaEQNodes = [];
 const activeDrumSrc = {};
 const drumVoiceQueue = [];
-const MAX_DRUM_VOICES = 3;
+const MAX_DRUM_VOICES = 2;
 const activeKalimbaSrc = {};
 let currentReplaySources = [];
 
@@ -155,17 +155,17 @@ function normalizeBuffer(buffer, target = 0.85) {
 
 async function preloadAudio(onProgress) {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const mkChain = (attack = 0.001, ratio = 20, knee = 1) => {
+  const mkChain = (attack = 0.001, ratio = 20, knee = 1, threshold = 0) => {
     const gain = audioCtx.createGain();
     gain.gain.value = state.volume / 100;
     const lim = audioCtx.createDynamicsCompressor();
-    lim.threshold.value = 0; lim.knee.value = knee; lim.ratio.value = ratio;
+    lim.threshold.value = threshold; lim.knee.value = knee; lim.ratio.value = ratio;
     lim.attack.value = attack; lim.release.value = 0.1;
     lim.connect(audioCtx.destination);
     return { gain, lim };
   };
   ({ gain: kalimbaGain, lim: kalimbaLimiter } = mkChain());
-  ({ gain: drumGain,    lim: drumLimiter    } = mkChain(0.0003, 20, 3));
+  ({ gain: drumGain,    lim: drumLimiter    } = mkChain(0.0001, 20, 0, -3));
 
   const allToLoad = [
     ...ALL_NOTES.map(n => ({ key: n, path: `${AUDIO_PATH}${n}.wav` })),
@@ -178,7 +178,7 @@ async function preloadAudio(onProgress) {
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
       const decoded = await audioCtx.decodeAudioData(buf);
-      normalizeBuffer(decoded, isDrumKey ? 0.6 : 1.0);
+      normalizeBuffer(decoded, isDrumKey ? 0.45 : 1.0);
       audioBuffers[key] = trimSilence(decoded, isDrumKey ? 1.2 : 1.5);
     } catch(e) { /* skip failed */ }
     done++;
@@ -239,8 +239,8 @@ function playNote(noteFile, scheduleAt = 0) {
   src.connect(env);
   env.connect(isDrum ? drumGain : kalimbaGain);
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
-  const hold = isDrum ? 1.5 : 1.0;
-  const fade = isDrum ? 2.0 : 1.5;
+  const hold = isDrum ? 0.9 : 1.0;
+  const fade = isDrum ? 1.15 : 1.5;
   const attack = isDrum ? 0.0005 : 0.01;
   env.gain.setValueAtTime(0, t);
   env.gain.linearRampToValueAtTime(1, t + attack);
@@ -261,8 +261,8 @@ function fadeStop(srcObj, fadeTime = 0.01) {
   if (!srcObj) return;
   const { src, env } = srcObj;
   try {
+    const t = audioCtx ? audioCtx.currentTime : 0;
     if (env && audioCtx) {
-      const t = audioCtx.currentTime;
       env.gain.cancelAndHoldAtTime(t);
       env.gain.linearRampToValueAtTime(0, t + fadeTime);
     }
@@ -1147,11 +1147,12 @@ function renderDrum() {
       resumeCtx();
       const hadActive = !!activeDrumSrc[key];
       if (hadActive) fadeStop(activeDrumSrc[key], 0.015);
-      const startAt = hadActive ? audioCtx.currentTime + 0.015 : 0;
+      const didSteal = drumVoiceQueue.length >= MAX_DRUM_VOICES;
+      while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.005);
+      const startAt = hadActive ? audioCtx.currentTime + 0.015 : didSteal ? audioCtx.currentTime + 0.007 : 0;
       const dObj = playNote('drum_' + key, startAt);
       activeDrumSrc[key] = dObj;
       if (dObj) {
-        while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.02);
         drumVoiceQueue.push(dObj);
         dObj.src.addEventListener('ended', () => {
           const i = drumVoiceQueue.indexOf(dObj); if (i >= 0) drumVoiceQueue.splice(i, 1);
@@ -1193,11 +1194,12 @@ function renderDrum() {
     resumeCtx();
     const hadC3 = !!activeDrumSrc['c3'];
     if (hadC3) fadeStop(activeDrumSrc['c3'], 0.015);
-    const c3Start = hadC3 ? audioCtx.currentTime + 0.015 : 0;
+    const didStealC3 = drumVoiceQueue.length >= MAX_DRUM_VOICES;
+    while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.005);
+    const c3Start = hadC3 ? audioCtx.currentTime + 0.015 : didStealC3 ? audioCtx.currentTime + 0.007 : 0;
     const c3Obj = playNote('drum_c3', c3Start);
     activeDrumSrc['c3'] = c3Obj;
     if (c3Obj) {
-      while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.02);
       drumVoiceQueue.push(c3Obj);
       c3Obj.src.addEventListener('ended', () => {
         const i = drumVoiceQueue.indexOf(c3Obj); if (i >= 0) drumVoiceQueue.splice(i, 1);
