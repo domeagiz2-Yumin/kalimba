@@ -130,6 +130,22 @@ function trimSilence(buffer, maxSec = 1.5) {
   return out;
 }
 
+function makeDrumSoftClipper() {
+  const ws = audioCtx.createWaveShaper();
+  const n = 4096;
+  const curve = new Float32Array(n);
+  const thr = 0.75;
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    const a = Math.abs(x);
+    curve[i] = a <= thr ? x
+      : Math.sign(x) * (thr + (2 / Math.PI) * (1 - thr) * Math.atan((Math.PI / 2) * (a - thr) / (1 - thr)));
+  }
+  ws.curve = curve;
+  ws.oversample = '2x';
+  return ws;
+}
+
 function normalizeBuffer(buffer, target = 0.85) {
   let peak = 0;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
@@ -176,7 +192,7 @@ async function preloadAudio(onProgress) {
       const isDrumKey = key.startsWith('drum_');
       const decoded = await audioCtx.decodeAudioData(buf);
       normalizeBuffer(decoded, isDrumKey ? 0.75 : 1.0);
-      audioBuffers[key] = trimSilence(decoded, isDrumKey ? 1.8 : 1.5);
+      audioBuffers[key] = trimSilence(decoded, isDrumKey ? 1.2 : 1.5);
     } catch(e) { /* skip failed */ }
     done++;
     onProgress(Math.round(done / allToLoad.length * 100));
@@ -215,6 +231,10 @@ function buildSharedEQ() {
     if (!isD || eq !== 'DRY') {
       const ceil = mkf('lowpass', isD ? 8000 : 6000, isD ? 0.1 : 0.7);
       prev.connect(ceil); eqNodes.push(ceil); prev = ceil;
+    }
+    if (isD) {
+      const clipper = makeDrumSoftClipper();
+      prev.connect(clipper); eqNodes.push(clipper); prev = clipper;
     }
     prev.connect(limiter);
   };
