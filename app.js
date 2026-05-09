@@ -1905,6 +1905,16 @@ const App = {
       if (c && c.children.length) adjustTineHeights(c);
     }).observe(document.getElementById('screen-main'));
 
+    // Lock landscape on first touch (requires user gesture)
+    document.addEventListener('touchstart', () => {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    }, { once: true });
+
     // Resume audio on first touch
     document.addEventListener('touchstart', resumeCtx);
     document.addEventListener('click', resumeCtx);
