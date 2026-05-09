@@ -1145,11 +1145,10 @@ function renderDrum() {
     path.addEventListener('pointerdown', e => {
       e.preventDefault(); path.setAttribute('fill', tP);
       resumeCtx();
-      const hadActive = !!activeDrumSrc[key];
-      if (hadActive) fadeStop(activeDrumSrc[key], 0.015);
-      const didSteal = drumVoiceQueue.length >= MAX_DRUM_VOICES;
-      while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.005);
-      const startAt = hadActive ? audioCtx.currentTime + 0.015 : didSteal ? audioCtx.currentTime + 0.007 : 0;
+      drumVoiceQueue.forEach(v => fadeStop(v, 0.010));
+      drumVoiceQueue.length = 0;
+      Object.keys(activeDrumSrc).forEach(k => delete activeDrumSrc[k]);
+      const startAt = audioCtx.currentTime + 0.012;
       const dObj = playNote('drum_' + key, startAt);
       activeDrumSrc[key] = dObj;
       if (dObj) {
@@ -1192,11 +1191,10 @@ function renderDrum() {
   ce.addEventListener('pointerdown', e => {
     e.preventDefault(); ce.setAttribute('fill', ceP);
     resumeCtx();
-    const hadC3 = !!activeDrumSrc['c3'];
-    if (hadC3) fadeStop(activeDrumSrc['c3'], 0.015);
-    const didStealC3 = drumVoiceQueue.length >= MAX_DRUM_VOICES;
-    while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.005);
-    const c3Start = hadC3 ? audioCtx.currentTime + 0.015 : didStealC3 ? audioCtx.currentTime + 0.007 : 0;
+    drumVoiceQueue.forEach(v => fadeStop(v, 0.010));
+    drumVoiceQueue.length = 0;
+    Object.keys(activeDrumSrc).forEach(k => delete activeDrumSrc[k]);
+    const c3Start = audioCtx.currentTime + 0.012;
     const c3Obj = playNote('drum_c3', c3Start);
     activeDrumSrc['c3'] = c3Obj;
     if (c3Obj) {
