@@ -112,6 +112,8 @@ let state = { ...DEFAULT_STATE };
 let audioCtx, drumGain, kalimbaGain, drumLimiter, kalimbaLimiter, audioBuffers = {};
 let _drumEQNodes = [], _kalimbaEQNodes = [];
 const activeDrumSrc = {};
+const drumVoiceQueue = [];
+const MAX_DRUM_VOICES = 3;
 const activeKalimbaSrc = {};
 let currentReplaySources = [];
 
@@ -130,21 +132,6 @@ function trimSilence(buffer, maxSec = 1.5) {
   return out;
 }
 
-function makeDrumSoftClipper() {
-  const ws = audioCtx.createWaveShaper();
-  const n = 4096;
-  const curve = new Float32Array(n);
-  const thr = 0.75;
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1)) * 2 - 1;
-    const a = Math.abs(x);
-    curve[i] = a <= thr ? x
-      : Math.sign(x) * (thr + (2 / Math.PI) * (1 - thr) * Math.atan((Math.PI / 2) * (a - thr) / (1 - thr)));
-  }
-  ws.curve = curve;
-  ws.oversample = '2x';
-  return ws;
-}
 
 function normalizeBuffer(buffer, target = 0.85) {
   let peak = 0;
@@ -168,17 +155,17 @@ function normalizeBuffer(buffer, target = 0.85) {
 
 async function preloadAudio(onProgress) {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const mkChain = () => {
+  const mkChain = (attack = 0.001, ratio = 20, knee = 1) => {
     const gain = audioCtx.createGain();
     gain.gain.value = state.volume / 100;
     const lim = audioCtx.createDynamicsCompressor();
-    lim.threshold.value = 0; lim.knee.value = 1; lim.ratio.value = 20;
-    lim.attack.value = 0.001; lim.release.value = 0.15;
+    lim.threshold.value = 0; lim.knee.value = knee; lim.ratio.value = ratio;
+    lim.attack.value = attack; lim.release.value = 0.1;
     lim.connect(audioCtx.destination);
     return { gain, lim };
   };
   ({ gain: kalimbaGain, lim: kalimbaLimiter } = mkChain());
-  ({ gain: drumGain,    lim: drumLimiter    } = mkChain());
+  ({ gain: drumGain,    lim: drumLimiter    } = mkChain(0.0003, 20, 3));
 
   const allToLoad = [
     ...ALL_NOTES.map(n => ({ key: n, path: `${AUDIO_PATH}${n}.wav` })),
@@ -191,7 +178,7 @@ async function preloadAudio(onProgress) {
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
       const decoded = await audioCtx.decodeAudioData(buf);
-      normalizeBuffer(decoded, isDrumKey ? 0.75 : 1.0);
+      normalizeBuffer(decoded, isDrumKey ? 0.6 : 1.0);
       audioBuffers[key] = trimSilence(decoded, isDrumKey ? 1.2 : 1.5);
     } catch(e) { /* skip failed */ }
     done++;
@@ -231,10 +218,6 @@ function buildSharedEQ() {
     if (!isD || eq !== 'DRY') {
       const ceil = mkf('lowpass', isD ? 8000 : 6000, isD ? 0.1 : 0.7);
       prev.connect(ceil); eqNodes.push(ceil); prev = ceil;
-    }
-    if (isD) {
-      const clipper = makeDrumSoftClipper();
-      prev.connect(clipper); eqNodes.push(clipper); prev = clipper;
     }
     prev.connect(limiter);
   };
@@ -1167,7 +1150,14 @@ function renderDrum() {
       const startAt = hadActive ? audioCtx.currentTime + 0.015 : 0;
       const dObj = playNote('drum_' + key, startAt);
       activeDrumSrc[key] = dObj;
-      if (dObj) dObj.src.addEventListener('ended', () => { if (activeDrumSrc[key] === dObj) delete activeDrumSrc[key]; });
+      if (dObj) {
+        while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.02);
+        drumVoiceQueue.push(dObj);
+        dObj.src.addEventListener('ended', () => {
+          const i = drumVoiceQueue.indexOf(dObj); if (i >= 0) drumVoiceQueue.splice(i, 1);
+          if (activeDrumSrc[key] === dObj) delete activeDrumSrc[key];
+        });
+      }
       if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
       if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
       if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
@@ -1206,7 +1196,14 @@ function renderDrum() {
     const c3Start = hadC3 ? audioCtx.currentTime + 0.015 : 0;
     const c3Obj = playNote('drum_c3', c3Start);
     activeDrumSrc['c3'] = c3Obj;
-    if (c3Obj) c3Obj.src.addEventListener('ended', () => { if (activeDrumSrc['c3'] === c3Obj) delete activeDrumSrc['c3']; });
+    if (c3Obj) {
+      while (drumVoiceQueue.length >= MAX_DRUM_VOICES) fadeStop(drumVoiceQueue.shift(), 0.02);
+      drumVoiceQueue.push(c3Obj);
+      c3Obj.src.addEventListener('ended', () => {
+        const i = drumVoiceQueue.indexOf(c3Obj); if (i >= 0) drumVoiceQueue.splice(i, 1);
+        if (activeDrumSrc['c3'] === c3Obj) delete activeDrumSrc['c3'];
+      });
+    }
     if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
     if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
     if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
