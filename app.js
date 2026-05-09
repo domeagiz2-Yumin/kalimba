@@ -273,10 +273,16 @@ function fadeStop(srcObj, fadeTime = 0.01) {
 }
 
 function killDrumVoice(srcObj) {
-  if (!srcObj) return;
+  if (!srcObj || !audioCtx) return;
   const { src, env } = srcObj;
-  try { if (env) env.gain.value = 0; } catch(_) {}
-  try { if (src) src.stop(); } catch(_) {}
+  const t = audioCtx.currentTime;
+  try {
+    if (env) {
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(0, t);
+    }
+  } catch(_) {}
+  try { if (src) src.stop(t + 0.005); } catch(_) {}
 }
 
 // ═══════════════════════════════════════

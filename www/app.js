@@ -109,9 +109,11 @@ let state = { ...DEFAULT_STATE };
 // ═══════════════════════════════════════
 //  AUDIO
 // ═══════════════════════════════════════
-let audioCtx, masterGain, limiterNode, audioBuffers = {};
-let _eqNodes = [];
+let audioCtx, drumGain, kalimbaGain, drumLimiter, kalimbaLimiter, audioBuffers = {};
+let _drumEQNodes = [], _kalimbaEQNodes = [];
 const activeDrumSrc = {};
+const drumVoiceQueue = [];
+const MAX_DRUM_VOICES = 2;
 const activeKalimbaSrc = {};
 let currentReplaySources = [];
 
@@ -129,6 +131,7 @@ function trimSilence(buffer, maxSec = 1.5) {
   }
   return out;
 }
+
 
 function normalizeBuffer(buffer, target = 0.85) {
   let peak = 0;
@@ -149,17 +152,20 @@ function normalizeBuffer(buffer, target = 0.85) {
   return buffer;
 }
 
+
 async function preloadAudio(onProgress) {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = state.volume / 100;
-  limiterNode = audioCtx.createDynamicsCompressor();
-  limiterNode.threshold.value = 0;
-  limiterNode.knee.value = 1;
-  limiterNode.ratio.value = 20;
-  limiterNode.attack.value = 0.001;
-  limiterNode.release.value = 0.15;
-  limiterNode.connect(audioCtx.destination);
+  const mkChain = (attack = 0.001, ratio = 20, knee = 1, threshold = 0) => {
+    const gain = audioCtx.createGain();
+    gain.gain.value = state.volume / 100;
+    const lim = audioCtx.createDynamicsCompressor();
+    lim.threshold.value = threshold; lim.knee.value = knee; lim.ratio.value = ratio;
+    lim.attack.value = attack; lim.release.value = 0.1;
+    lim.connect(audioCtx.destination);
+    return { gain, lim };
+  };
+  ({ gain: kalimbaGain, lim: kalimbaLimiter } = mkChain());
+  ({ gain: drumGain,    lim: drumLimiter    } = mkChain(0.0001, 20, 0, -3));
 
   const allToLoad = [
     ...ALL_NOTES.map(n => ({ key: n, path: `${AUDIO_PATH}${n}.wav` })),
@@ -171,8 +177,9 @@ async function preloadAudio(onProgress) {
       const res = await fetch(path);
       const buf = await res.arrayBuffer();
       const isDrumKey = key.startsWith('drum_');
-      const decoded = normalizeBuffer(await audioCtx.decodeAudioData(buf), isDrumKey ? 0.75 : 1.0);
-      audioBuffers[key] = isDrumKey ? trimSilence(decoded, 2.0) : trimSilence(decoded, 1.5);
+      const decoded = await audioCtx.decodeAudioData(buf);
+      normalizeBuffer(decoded, isDrumKey ? 0.45 : 1.0);
+      audioBuffers[key] = trimSilence(decoded, isDrumKey ? 1.2 : 1.5);
     } catch(e) { /* skip failed */ }
     done++;
     onProgress(Math.round(done / allToLoad.length * 100));
@@ -188,13 +195,8 @@ function currentEQ() {
 }
 
 function buildSharedEQ() {
-  if (!audioCtx || !masterGain || !limiterNode) return;
-  masterGain.disconnect();
-  _eqNodes.forEach(n => { try { n.disconnect(); } catch(_) {} });
-  _eqNodes = [];
+  if (!audioCtx || !kalimbaGain || !drumGain) return;
 
-  const drum = state.instrument === 'DRUM';
-  const eq = currentEQ();
   const mkf = (type, freq, Q, gain) => {
     const f = audioCtx.createBiquadFilter();
     f.type = type; f.frequency.value = freq;
@@ -202,21 +204,26 @@ function buildSharedEQ() {
     if (gain !== undefined) f.gain.value = gain;
     return f;
   };
-  let prev = masterGain;
-  const chain = (nodes) => {
-    nodes.forEach(n => { prev.connect(n); _eqNodes.push(n); prev = n; });
+
+  const buildChain = (srcGain, eqNodes, eq, isD, limiter) => {
+    srcGain.disconnect();
+    eqNodes.forEach(n => { try { n.disconnect(); } catch(_) {} });
+    eqNodes.length = 0;
+    let prev = srcGain;
+    const chain = (nodes) => nodes.forEach(n => { prev.connect(n); eqNodes.push(n); prev = n; });
+    if      (eq === 'WARM')     chain([mkf('lowpass',  isD?1200:1000, 0.6),     mkf('lowshelf',  isD?200:480,   undefined, 3)]);
+    else if (eq === 'BRIGHT')   chain([mkf('highpass', isD?200:120,   0.5),     mkf('highshelf', isD?1400:2400, undefined, 6)]);
+    else if (eq === 'DEEP')     chain([mkf('lowshelf', isD?220:500,   undefined, 5), mkf('highshelf', isD?900:2800, undefined, -5)]);
+    else if (eq === 'PRESENCE') chain([mkf('peaking',  isD?450:1000,  1.0, 5),  mkf('peaking',   isD?1800:4500, 2.0, 4)]);
+    if (!isD || eq !== 'DRY') {
+      const ceil = mkf('lowpass', isD ? 8000 : 6000, isD ? 0.1 : 0.7);
+      prev.connect(ceil); eqNodes.push(ceil); prev = ceil;
+    }
+    prev.connect(limiter);
   };
 
-  if      (eq === 'WARM')     chain([mkf('lowpass',  drum?1200:1000, 0.6),    mkf('lowshelf',  drum?200:480,  undefined, 3)]);
-  else if (eq === 'BRIGHT')   chain([mkf('highpass', drum?200:120,   0.5),    mkf('highshelf', drum?1400:2400,undefined, 6)]);
-  else if (eq === 'DEEP')     chain([mkf('lowshelf', drum?220:500,   undefined,5),mkf('highshelf',drum?900:2800,undefined,-5)]);
-  else if (eq === 'PRESENCE') chain([mkf('peaking',  drum?450:1000,  1.0, 5), mkf('peaking',   drum?1800:4500,2.0,       4)]);
-
-  if (!drum || eq !== 'DRY') {
-    const ceil = mkf('lowpass', drum ? 8000 : 6000, drum ? 0.1 : 0.7);
-    prev.connect(ceil); _eqNodes.push(ceil); prev = ceil;
-  }
-  prev.connect(limiterNode);
+  buildChain(kalimbaGain, _kalimbaEQNodes, state.eqKalimba, false, kalimbaLimiter);
+  buildChain(drumGain,    _drumEQNodes,    state.eqDrum,    true,  drumLimiter);
 }
 
 function playNote(noteFile, scheduleAt = 0) {
@@ -226,14 +233,14 @@ function playNote(noteFile, scheduleAt = 0) {
   const src = audioCtx.createBufferSource();
   src.buffer = audioBuffers[noteFile];
 
+  const isDrum = noteFile.startsWith('drum_');
+
   const env = audioCtx.createGain();
   src.connect(env);
-  env.connect(masterGain);
-
-  const isDrum = noteFile.startsWith('drum_');
+  env.connect(isDrum ? drumGain : kalimbaGain);
   const t = scheduleAt > 0 ? scheduleAt : audioCtx.currentTime;
-  const hold = isDrum ? 1.5 : 1.0;
-  const fade = isDrum ? 2.0 : 1.5;
+  const hold = isDrum ? 0.9 : 1.0;
+  const fade = isDrum ? 1.15 : 1.5;
   const attack = isDrum ? 0.0005 : 0.01;
   env.gain.setValueAtTime(0, t);
   env.gain.linearRampToValueAtTime(1, t + attack);
@@ -254,14 +261,28 @@ function fadeStop(srcObj, fadeTime = 0.01) {
   if (!srcObj) return;
   const { src, env } = srcObj;
   try {
+    const t = audioCtx ? audioCtx.currentTime : 0;
     if (env && audioCtx) {
-      const t = audioCtx.currentTime;
+      const g = env.gain.value;
       env.gain.cancelScheduledValues(t);
-      env.gain.setValueAtTime(1, t);
+      env.gain.setValueAtTime(g, t);
       env.gain.linearRampToValueAtTime(0, t + fadeTime);
     }
-    setTimeout(() => { try { src.stop(); } catch(_) {} }, fadeTime * 1000 + 5);
+    try { src.stop(t + fadeTime + 0.001); } catch(_) {}
   } catch(_) { try { src.stop(); } catch(__) {} }
+}
+
+function killDrumVoice(srcObj) {
+  if (!srcObj || !audioCtx) return;
+  const { src, env } = srcObj;
+  const t = audioCtx.currentTime;
+  try {
+    if (env) {
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(0, t);
+    }
+  } catch(_) {}
+  try { if (src) src.stop(t + 0.005); } catch(_) {}
 }
 
 // ═══════════════════════════════════════
@@ -1139,12 +1160,18 @@ function renderDrum() {
     path.addEventListener('pointerdown', e => {
       e.preventDefault(); path.setAttribute('fill', tP);
       resumeCtx();
-      const hadActive = !!activeDrumSrc[key];
-      if (hadActive) fadeStop(activeDrumSrc[key], 0.003);
-      const startAt = hadActive ? audioCtx.currentTime + 0.003 : 0;
-      const dObj = playNote('drum_' + key, startAt);
+      drumVoiceQueue.forEach(v => killDrumVoice(v));
+      drumVoiceQueue.length = 0;
+      Object.keys(activeDrumSrc).forEach(k => delete activeDrumSrc[k]);
+      const dObj = playNote('drum_' + key, 0);
       activeDrumSrc[key] = dObj;
-      if (dObj) dObj.src.addEventListener('ended', () => { if (activeDrumSrc[key] === dObj) delete activeDrumSrc[key]; });
+      if (dObj) {
+        drumVoiceQueue.push(dObj);
+        dObj.src.addEventListener('ended', () => {
+          const i = drumVoiceQueue.indexOf(dObj); if (i >= 0) drumVoiceQueue.splice(i, 1);
+          if (activeDrumSrc[key] === dObj) delete activeDrumSrc[key];
+        });
+      }
       if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
       if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
       if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
@@ -1178,12 +1205,18 @@ function renderDrum() {
   ce.addEventListener('pointerdown', e => {
     e.preventDefault(); ce.setAttribute('fill', ceP);
     resumeCtx();
-    const hadC3 = !!activeDrumSrc['c3'];
-    if (hadC3) fadeStop(activeDrumSrc['c3'], 0.003);
-    const c3Start = hadC3 ? audioCtx.currentTime + 0.003 : 0;
-    const c3Obj = playNote('drum_c3', c3Start);
+    drumVoiceQueue.forEach(v => killDrumVoice(v));
+    drumVoiceQueue.length = 0;
+    Object.keys(activeDrumSrc).forEach(k => delete activeDrumSrc[k]);
+    const c3Obj = playNote('drum_c3', 0);
     activeDrumSrc['c3'] = c3Obj;
-    if (c3Obj) c3Obj.src.addEventListener('ended', () => { if (activeDrumSrc['c3'] === c3Obj) delete activeDrumSrc['c3']; });
+    if (c3Obj) {
+      drumVoiceQueue.push(c3Obj);
+      c3Obj.src.addEventListener('ended', () => {
+        const i = drumVoiceQueue.indexOf(c3Obj); if (i >= 0) drumVoiceQueue.splice(i, 1);
+        if (activeDrumSrc['c3'] === c3Obj) delete activeDrumSrc['c3'];
+      });
+    }
     if (state.theme === 'BLUE') spawnDrumRipple(e.clientX, e.clientY);
     if (state.theme === 'SAKURA') spawnSakuraBurst(e.clientX, e.clientY);
     if (state.theme === 'PRISM') spawnPrismBurst(e.clientX, e.clientY);
@@ -1885,6 +1918,16 @@ const App = {
       if (c && c.children.length) adjustTineHeights(c);
     }).observe(document.getElementById('screen-main'));
 
+    // Lock landscape on first touch (requires user gesture)
+    document.addEventListener('touchstart', () => {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    }, { once: true });
+
     // Resume audio on first touch
     document.addEventListener('touchstart', resumeCtx);
     document.addEventListener('click', resumeCtx);
@@ -1914,6 +1957,12 @@ const App = {
   },
 
   selectLang(lang) {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
     state.lang = lang;
     saveState();
     this._startMain();
@@ -1935,7 +1984,8 @@ const App = {
 
   setVolume(val) {
     state.volume = Number(val);
-    if (masterGain) masterGain.gain.value = state.volume / 100;
+    if (kalimbaGain) kalimbaGain.gain.value = state.volume / 100;
+    if (drumGain)    drumGain.gain.value    = state.volume / 100;
     saveState();
   },
 
